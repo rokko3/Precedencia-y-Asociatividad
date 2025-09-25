@@ -1,26 +1,99 @@
-from LabeledExprVisitor import LabeledExprVisitor
-from LabeledExprParser import LabeledExprParser
 import math
+from LabeledExprParser import LabeledExprParser
+from LabeledExprVisitor import LabeledExprVisitor
 
 class EvalVisitor(LabeledExprVisitor):
     def __init__(self):
         self.memory = {}
 
-    def visitAssign(self, ctx:LabeledExprParser.AssignContext):
-        id = ctx.ID().getText()
-        value = self.visit(ctx.expr())
-        self.memory[id] = value
-        return value
+    # --- prog ---
+    def visitProg(self, ctx:LabeledExprParser.ProgContext):
+        result = None
+        exprs = ctx.expr()
+        if not isinstance(exprs, list):
+            return self.visit(exprs)
+        for e in exprs:
+            result = self.visit(e)
+        return result
 
-    def visitPrintExpr(self, ctx:LabeledExprParser.PrintExprContext):
-        value = self.visit(ctx.expr())
-        print(value)
-        return value
+    # --- addExpr derecha ---
+    def visitAddRight(self, ctx:LabeledExprParser.AddRightContext):
+        left = self.visit(ctx.mulExpr())
+        right_ctx = None
+        for child in ctx.children:
+            if isinstance(child, LabeledExprParser.AddRightContext):
+                right_ctx = child
+                break
+        if right_ctx:
+            right = self.visit(right_ctx)
+            op = ctx.getChild(1).getText()
+            return left + right if op == '+' else left - right
+        return left
 
-    def visitBlank(self, ctx:LabeledExprParser.BlankContext):
-        return None
+    # --- mulExpr derecha ---
+    def visitMulRight(self, ctx:LabeledExprParser.MulRightContext):
+        left = self.visit(ctx.unaryExpr())
+        right_ctx = None
+        for child in ctx.children:
+            if isinstance(child, LabeledExprParser.MulRightContext):
+                right_ctx = child
+                break
+        if right_ctx:
+            right = self.visit(right_ctx)
+            op = ctx.getChild(1).getText()
+            if op == '*':
+                return left * right
+            elif op == '/':
+                return left / right
+            elif op == '%':
+                return left % right
+        return left
 
+    # --- unarios ---
+    def visitUnaryMinus(self, ctx:LabeledExprParser.UnaryMinusContext):
+        return -self.visit(ctx.unaryExpr())
 
+    def visitUnaryPlus(self, ctx:LabeledExprParser.UnaryPlusContext):
+        return +self.visit(ctx.unaryExpr())
+
+    def visitToPostfix(self, ctx:LabeledExprParser.ToPostfixContext):
+        return self.visit(ctx.postfixExpr())
+
+    # --- factorial ---
+    def visitFactf(self, ctx:LabeledExprParser.FactfContext):
+        result = self.visit(ctx.primaryExpr())
+        for _ in ctx.FACT():
+            result = math.factorial(int(result))
+        return result
+
+    # --- funciones ---
+    def visitFuncCall(self, ctx:LabeledExprParser.FuncCallContext):
+        func_name = ctx.ID().getText()
+        arg = self.visit(ctx.expr())
+        if func_name == "sin": return math.sin(arg)
+        if func_name == "cos": return math.cos(arg)
+        if func_name == "tan": return math.tan(arg)
+        if func_name == "exp": return math.exp(arg)
+        raise Exception(f"Función desconocida: {func_name}")
+
+    def visitSqrtf(self, ctx:LabeledExprParser.SqrtfContext):
+        return math.sqrt(self.visit(ctx.expr()))
+
+    def visitLnf(self, ctx:LabeledExprParser.LnfContext):
+        return math.log(self.visit(ctx.expr()))
+
+    def visitLogf(self, ctx:LabeledExprParser.LogfContext):
+        return math.log10(self.visit(ctx.expr()))
+
+    def visitFuncRad(self, ctx:LabeledExprParser.FuncRadContext):
+        func_name = ctx.ID().getText()
+        arg = self.visit(ctx.expr())
+        if func_name == "sin": return math.sin(math.radians(arg))
+        if func_name == "cos": return math.cos(math.radians(arg))
+        if func_name == "tan": return math.tan(math.radians(arg))
+        raise Exception(f"Función trigonométrica desconocida (rad): {func_name}")
+
+    # --- literales ---
     def visitInt(self, ctx:LabeledExprParser.IntContext):
         return int(ctx.INT().getText())
 
@@ -28,93 +101,10 @@ class EvalVisitor(LabeledExprVisitor):
         return float(ctx.DOUBLE().getText())
 
     def visitId(self, ctx:LabeledExprParser.IdContext):
-        id = ctx.ID().getText()
-        return self.memory.get(id, 0)
+        name = ctx.ID().getText()
+        if name in self.memory:
+            return self.memory[name]
+        raise Exception(f"Variable no definida: {name}")
 
     def visitParens(self, ctx:LabeledExprParser.ParensContext):
         return self.visit(ctx.expr())
-    
-    def visitUnaryMinus(self, ctx:LabeledExprParser.UnaryMinusContext):
-        return -self.visit(ctx.expr())
-
-    def visitUnaryPlus(self, ctx:LabeledExprParser.UnaryPlusContext):
-        return +self.visit(ctx.expr())
-
-    def visitAddSub(self, ctx:LabeledExprParser.AddSubContext):
-        left = self.visit(ctx.expr(0))
-        right = self.visit(ctx.expr(1))
-        if ctx.op.type == LabeledExprParser.ADD:
-            return left + right
-        return left - right
-
-    def visitMulDiv(self, ctx:LabeledExprParser.MulDivContext):
-        left = self.visit(ctx.expr(0))
-        right = self.visit(ctx.expr(1))
-        if ctx.op.type == LabeledExprParser.MUL:
-            return left * right
-        elif ctx.op.type == LabeledExprParser.DIV:
-            if right==0:
-                print("Error: División por cero")
-                return None
-            return left / right
-        elif ctx.op.type == LabeledExprParser.MOD:
-            return left % right
-        elif ctx.op.type == LabeledExprParser.POW:
-            return left ** right
-        else:
-            return None
-
-    def visitFactf(self, ctx:LabeledExprParser.FactfContext):
-        value = self.visit(ctx.expr())
-        return math.factorial(int(value))
-
-    def visitFuncCall(self, ctx:LabeledExprParser.FuncCallContext):
-        func = ctx.func.text.lower()
-        value = self.visit(ctx.expr())
-        if func == "sin":
-            return math.sin(math.radians(value))
-        elif func == "cos":
-            return math.cos(math.radians(value))
-        elif func == "tan":
-            return math.tan(math.radians(value))
-        else:
-            print("Función desconocida:", func)
-            return None
-
-    def visitFuncRad(self, ctx:LabeledExprParser.FuncRadContext):
-        func = ctx.func.text.lower()
-        value = self.visit(ctx.expr())
-        if func == "sin":
-            return math.sin(value)   
-        elif func == "cos":
-            return math.cos(value)
-        elif func == "tan":
-            return math.tan(value)
-        else:
-            print("Función desconocida con rad:", func)
-            return None
-
-    def visitSqrtf(self, ctx:LabeledExprParser.SqrtfContext):
-        if self.visit(ctx.expr()) < 0:
-            print("Error: Raíz cuadrada de un número negativo")
-            return None
-            
-        return math.sqrt(self.visit(ctx.expr()))
-
-    def visitLnf(self, ctx:LabeledExprParser.LnfContext):
-        if self.visit(ctx.expr()) <= 0:
-            print("Error: Logaritmo natural de un número no positivo")
-            return None
-        return math.log(self.visit(ctx.expr()))
-
-    def visitLogf(self, ctx:LabeledExprParser.LogfContext):
-        if self.visit(ctx.expr()) <= 0:
-            print("Error: Logaritmo de un número no positivo")
-            return None
-        return math.log10(self.visit(ctx.expr()))
-
-    def visitProg(self, ctx:LabeledExprParser.ProgContext):
-        result = None
-        for child in ctx.getChildren():
-            result = self.visit(child)
-        return result

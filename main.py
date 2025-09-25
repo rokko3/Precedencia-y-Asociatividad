@@ -1,5 +1,6 @@
 import sys
 from antlr4 import *
+from antlr4.tree.Trees import Trees
 from LabeledExprLexer import LabeledExprLexer
 from LabeledExprParser import LabeledExprParser
 from EvalVisitor import EvalVisitor
@@ -11,7 +12,8 @@ def main(argv):
     tree = parser.prog()
 
     visitor = EvalVisitor()
-    result = visitor.visit(tree)
-
+    resultado=visitor.visit(tree)
+    print(resultado)
+    print(Trees.toStringTree(tree, None, parser))
 if __name__ == '__main__':
     main(sys.argv)
